@@ -39,6 +39,14 @@ make run-server
 python -m src ask --project project_one "Где хранится конфигурация базы данных?"
 ```
 
+### Docker One‑Command Run
+```
+cp .env.example .env
+docker compose up --build -d
+# Откройте http://localhost:8000 — при первом запуске откроется страница /setup
+```
+На странице «Setup» проверьте GitLab URL/Token и OpenAI API Key, сохраните — после этого API доступен.
+
 ### Project Structure
 ```
 src/

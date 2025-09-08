@@ -39,6 +39,25 @@ class GitLabAPI:
         resp.raise_for_status()
         return resp
 
+    def list_projects(self, search: Optional[str] = None, membership: bool = True, per_page: int = 100) -> List[Dict[str, Any]]:
+        items: List[Dict[str, Any]] = []
+        page = 1
+        while True:
+            params: Dict[str, Any] = {"page": page, "per_page": per_page}
+            if search:
+                params["search"] = search
+            if membership:
+                params["membership"] = True
+            resp = self._get("/projects", params=params)
+            chunk = resp.json()
+            if not chunk:
+                break
+            items.extend(chunk)
+            if len(chunk) < per_page:
+                break
+            page += 1
+        return items
+
     def get_repository_tree(self, project_id: str, ref: str = "HEAD") -> List[Dict[str, Any]]:
         key = _cache_key("repo_tree", project_id, ref)
         cached = cache.get(key)
