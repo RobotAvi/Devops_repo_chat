@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Настройка · Multi‑Repo Q&A</title>
+    <link rel="stylesheet" href="/static/setup.css" />
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <div class="brand">
+                <div class="logo">MR</div>
+                <div>
+                    <h1>Multi‑Repo Q&A</h1>
+                    <p>Премиальная настройка окружения</p>
+                </div>
+            </div>
+
+            <form id="setupForm" onsubmit="return false;">
+                <div class="field">
+                    <label>GitLab Base URL</label>
+                    <input type="url" id="gitlab_base_url" placeholder="https://webgit.korusconsulting.ru/api/v4" required />
+                    <button class="ghost" type="button" onclick="validateGitlab()">Проверить</button>
+                    <div class="hint" id="gitlab_hint"></div>
+                </div>
+
+                <div class="field">
+                    <label>GitLab Token</label>
+                    <input type="password" id="gitlab_token" placeholder="Ваш GitLab PAT" required />
+                </div>
+
+                <div class="field">
+                    <label>OpenAI API Key</label>
+                    <input type="password" id="openai_api_key" placeholder="sk-..." required />
+                    <button class="ghost" type="button" onclick="validateOpenAI()">Проверить</button>
+                    <div class="hint" id="openai_hint"></div>
+                </div>
+
+                <div class="actions">
+                    <button type="submit" onclick="saveConfig()" class="primary">Сохранить и продолжить</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        async function validateGitlab() {
+            const base_url = document.getElementById('gitlab_base_url').value.trim();
+            const token = document.getElementById('gitlab_token').value.trim();
+            const res = await fetch('/setup/validate/gitlab', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: new URLSearchParams({base_url, token})
+            });
+            const data = await res.json();
+            const hint = document.getElementById('gitlab_hint');
+            hint.textContent = data.ok ? 'GitLab доступен' : `Ошибка: ${data.error}`;
+            hint.className = 'hint ' + (data.ok ? 'ok' : 'err');
+        }
+
+        async function validateOpenAI() {
+            const api_key = document.getElementById('openai_api_key').value.trim();
+            const res = await fetch('/setup/validate/openai', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: new URLSearchParams({api_key})
+            });
+            const data = await res.json();
+            const hint = document.getElementById('openai_hint');
+            hint.textContent = data.ok ? 'Ключ принят' : `Ошибка: ${data.error}`;
+            hint.className = 'hint ' + (data.ok ? 'ok' : 'err');
+        }
+
+        async function saveConfig() {
+            const gitlab_base_url = document.getElementById('gitlab_base_url').value.trim();
+            const gitlab_token = document.getElementById('gitlab_token').value.trim();
+            const openai_api_key = document.getElementById('openai_api_key').value.trim();
+            const res = await fetch('/setup/save', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: new URLSearchParams({gitlab_base_url, gitlab_token, openai_api_key})
+            });
+            const data = await res.json();
+            if (data.ok) {
+                window.location.href = '/';
+            }
+        }
+    </script>
+</body>
+<!-- Minimal, premium-inspired: dark, glass, subtle gradients -->
+</html>
+
