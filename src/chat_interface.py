@@ -44,6 +44,14 @@ def setup_page(request: Request):
     return templates.TemplateResponse("setup.html", {"request": request})
 
 
+@app.get("/", response_class=HTMLResponse)
+def home(request: Request):
+    if not _is_configured():
+        return RedirectResponse(url="/setup")
+    # Minimal dashboard with simple controls
+    return templates.TemplateResponse("dashboard.html", {"request": request})
+
+
 
 
 @app.post("/rebuild/{project_id}")
@@ -72,12 +80,27 @@ def validate_gitlab(base_url: str, token: str) -> dict:
     return {"ok": True}
 
 
+@app.get("/setup/projects")
+def list_projects(q: str | None = None) -> dict:
+    try:
+        api = GitLabAPI()
+        items = api.list_projects(search=q)
+        # Return minimal info for selection
+        projects = [
+            {"id": str(i.get("id")), "path_with_namespace": i.get("path_with_namespace", ""), "name": i.get("name", "")}
+            for i in items
+        ]
+        return {"ok": True, "projects": projects}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
 @app.post("/setup/validate/openai")
-def validate_openai(api_key: str) -> dict:
+def validate_openai(api_key: str, base_url: str | None = None, model: str | None = None) -> dict:
     try:
         from langchain_openai import OpenAIEmbeddings
 
-        _ = OpenAIEmbeddings(api_key=api_key, model=settings.embedding_model)
+        _ = OpenAIEmbeddings(api_key=api_key, base_url=base_url, model=model or settings.embedding_model)
         # lightweight call to validate format; avoid network call to keep it fast
     except Exception as e:
         return {"ok": False, "error": str(e)}
@@ -85,7 +108,7 @@ def validate_openai(api_key: str) -> dict:
 
 
 @app.post("/setup/save")
-def setup_save(gitlab_base_url: str, gitlab_token: str, openai_api_key: str) -> dict:
+def setup_save(gitlab_base_url: str, gitlab_token: str, llm_api_key: str | None = None, llm_base_url: str | None = None, llm_model: str | None = None, embedding_api_key: str | None = None, embedding_base_url: str | None = None, embedding_model: str | None = None) -> dict:
     # Persist to .env, overwrite or append keys
     import os
     from pathlib import Path
@@ -96,8 +119,19 @@ def setup_save(gitlab_base_url: str, gitlab_token: str, openai_api_key: str) -> 
     keys = {
         "GITLAB_BASE_URL": gitlab_base_url.strip(),
         "GITLAB_TOKEN": gitlab_token.strip(),
-        "OPENAI_API_KEY": openai_api_key.strip(),
     }
+    if llm_api_key is not None:
+        keys["LLM_API_KEY"] = llm_api_key.strip()
+    if llm_base_url is not None:
+        keys["LLM_BASE_URL"] = llm_base_url.strip()
+    if llm_model is not None:
+        keys["LLM_MODEL"] = llm_model.strip()
+    if embedding_api_key is not None:
+        keys["EMBEDDING_API_KEY"] = embedding_api_key.strip()
+    if embedding_base_url is not None:
+        keys["EMBEDDING_BASE_URL"] = embedding_base_url.strip()
+    if embedding_model is not None:
+        keys["EMBEDDING_MODEL"] = embedding_model.strip()
     # remove old keys
     for line in existing.splitlines():
         if not any(line.startswith(f"{k}=") for k in keys.keys()):

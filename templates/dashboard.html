@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dashboard · Multi‑Repo Q&A</title>
+  <link rel="stylesheet" href="/static/setup.css" />
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="brand">
+        <div class="logo">MR</div>
+        <div>
+          <h1>Панель управления</h1>
+          <p>Индексация и вопросы</p>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Поиск проектов</label>
+        <input type="text" id="search" placeholder="введите часть имени" />
+        <button class="ghost" onclick="loadProjects()">Найти</button>
+      </div>
+      <div id="projects" class="list"></div>
+
+      <div class="field">
+        <label>Вопрос</label>
+        <input id="question" placeholder="Введите вопрос" />
+        <button class="ghost" onclick="ask()">Спросить</button>
+      </div>
+      <div id="answer" class="hint"></div>
+    </div>
+  </div>
+
+  <script>
+    let selectedProject = null;
+
+    async function loadProjects() {
+      const q = document.getElementById('search').value.trim();
+      const res = await fetch('/setup/projects' + (q ? ('?q=' + encodeURIComponent(q)) : ''));
+      const data = await res.json();
+      const box = document.getElementById('projects');
+      box.innerHTML = '';
+      if (!data.ok) { box.textContent = 'Ошибка: ' + data.error; return; }
+      data.projects.forEach(p => {
+        const div = document.createElement('div');
+        div.className = 'item';
+        div.textContent = p.path_with_namespace;
+        div.onclick = () => { selectedProject = p.path_with_namespace; highlight(div); };
+        box.appendChild(div);
+      });
+    }
+
+    function highlight(el) {
+      [...document.querySelectorAll('#projects .item')].forEach(d => d.style.outline = '');
+      el.style.outline = '2px solid #3478f6';
+    }
+
+    async function ask() {
+      if (!selectedProject) { alert('Выберите проект'); return; }
+      const q = document.getElementById('question').value.trim();
+      if (!q) { return; }
+      const url = '/ask/' + encodeURIComponent(selectedProject).replaceAll('%2F','%252F') + '?q=' + encodeURIComponent(q);
+      const res = await fetch(url, { method: 'POST' });
+      const data = await res.json();
+      document.getElementById('answer').textContent = data.answer || JSON.stringify(data);
+    }
+
+    // optional: initial load
+    loadProjects();
+  </script>
+</body>
+</html>
+

@@ -9,7 +9,10 @@ from .config import settings
 
 
 def make_chain() -> ChatOpenAI:
-    return ChatOpenAI(api_key=settings.openai_api_key, model="gpt-4o-mini", temperature=0.1)
+    api_key = settings.llm_api_key or settings.openai_api_key
+    base_url = settings.llm_base_url
+    model = settings.llm_model
+    return ChatOpenAI(api_key=api_key, base_url=base_url, model=model, temperature=0.1)
 
 
 def generate_answer(question: str, context_chunks: List[str]) -> str:
