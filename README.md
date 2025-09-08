@@ -1,87 +1,117 @@
 ## GitLab Multi-Repo Q&A Bot (LangChain + FAISS)
 
-A scalable question-answering bot over multiple GitLab repositories without full cloning. It fetches repository structure and selected contents on-demand, caches locally, builds a vector index (FAISS), and uses LangChain to generate grounded answers.
+Сервис вопросов-ответов по нескольким репозиториям GitLab без полного клонирования. Получает структуру и содержимое файлов по API по необходимости, кэширует локально, строит векторный индекс (FAISS) и генерирует ответы через LangChain.
 
-### Features
-- Selective GitLab API fetching with retries and TTL cache
-- Structure parsing to identify key files (README, Dockerfile, configs, main modules)
-- Chunked loading and filtering (exclude binaries/tests)
-- Vectorization (OpenAI embeddings or alternative) and FAISS index
-- Reactive index updates (webhook/scheduler)
-- Access control and token management
-- CLI and optional FastAPI server
-- Tests (unit + integration), 70%+ coverage target
+### Возможности
+- Точечная загрузка по GitLab API с ретраями и TTL‑кэшем
+- Разбор структуры репозитория (ключевые файлы, конфиги, модули)
+- Порционная загрузка содержимого, фильтрация бинарей и тестов
+- Эмбеддинги (OpenAI‑совместимые) + FAISS индекс
+- Обновление индекса по запросу
+- Контроль доступа и токены администратора
+- FastAPI сервер и CLI
+- Тесты на pytest
 
-### Quickstart
-1) Create and fill environment:
+### Требования
+- Python 3.11+
+- GitLab PAT с правами чтения (api)
+
+### Быстрый старт (локально)
+1) Создайте файл окружения `.env` (можно пустой — базовые параметры зададите на странице /setup):
 ```
-cp .env.example .env
-# Fill tokens and settings
+touch .env
 ```
 
-2) Install dependencies (Python 3.8+):
+2) Установите зависимости:
 ```
 make install
 ```
 
-3) Run tests:
+3) Запустите тесты (необязательно):
 ```
 make test
 ```
 
-4) Start API server:
+4) Запустите сервер:
 ```
 make run-server
 ```
+Откройте `http://localhost:8000` — при первом запуске вы будете перенаправлены на `/setup` для ввода настроек и сохранения их в `.env`.
 
-5) Ask via CLI:
+### Docker (one‑command)
 ```
-python -m src ask --project project_one "Где хранится конфигурация базы данных?"
-```
-
-### Docker One‑Command Run
-```
-cp .env.example .env
+touch .env
 docker compose up --build -d
-# Откройте http://localhost:8000 — при первом запуске откроется страница /setup
+# Откройте http://localhost:8000 (страница /setup появится при отсутствии настроек)
 ```
-На странице «Setup» проверьте GitLab URL/Token и OpenAI API Key, сохраните — после этого API доступен.
+Docker‑компоуз монтирует каталоги `./data` и `./indices` внутрь контейнера для кэша и индексов.
 
-### Project Structure
+### Конфигурация (.env)
+Ключевые переменные окружения, читаются через `pydantic-settings`:
+- GITLAB_BASE_URL — базовый URL API GitLab (например, https://gitlab.com/api/v4)
+- GITLAB_TOKEN — ваш GitLab Personal Access Token
+- LLM_API_KEY, LLM_BASE_URL, LLM_MODEL — ключ/endpoint/модель для LLM (опционально)
+- OPENAI_API_KEY — ключ для эмбеддингов (если не задан EMBEDDING_API_KEY)
+- EMBEDDING_API_KEY, EMBEDDING_BASE_URL, EMBEDDING_MODEL — настройки эмбеддингов
+- CACHE_DIR (./data), CACHE_TTL_SECONDS (86400), REDIS_URL (опц.)
+- INDEX_DIR (./indices), LOG_LEVEL (INFO)
+- FASTAPI_HOST (0.0.0.0), FASTAPI_PORT (8000)
+- ALLOWED_PROJECTS — CSV‑список разрешённых проектов (если пусто, разрешены все)
+- ADMIN_TOKENS — CSV‑токены админов для обхода ALLOWED_PROJECTS
+
+После заполнения /setup настройки сохраняются в `.env` (перезаписываются соответствующие ключи).
+
+### API
+- `GET /healthz` — проверка состояния
+- `GET /setup` — страница настройки
+- `GET /` — простой дашборд (после настройки)
+- `POST /rebuild/{project_id}` — пересобрать индекс проекта, заголовок `X-API-Key` при необходимости доступа
+- `POST /ask/{project_id}?q=...` — получить ответ по проекту, заголовок `X-API-Key` при необходимости
+
+`project_id` — это `path_with_namespace` из GitLab (например, `group/subgroup/repo`).
+
+### CLI
+Запуск из исходников:
+```
+python -m src ask --project group/subgroup/repo "Где хранится конфигурация базы данных?"
+```
+Пересборка индекса:
+```
+python -m src rebuild --project group/subgroup/repo
+```
+Есть удобная цель Make для запроса:
+```
+PROJECT=group/sub/repo Q="Как запустить сервис?" make run-cli
+```
+
+### Структура проекта
 ```
 src/
-  access_control.py      # Access checks and token validation
-  chat_interface.py      # CLI + FastAPI app
-  config.py              # Settings via environment
-  gitlab_api_handler.py  # GitLab API integration + caching
-  index_builder.py       # FAISS index creation and updates
-  index_updater.py       # Webhook/scheduler updating
-  langchain_chain.py     # LangChain pipeline
-  partial_file_loader.py # Chunking + file-type filtering
-  query_processor.py     # Orchestration from question to answer
-  structure_parser.py    # Parse repo structure to detect key files
-  utils.py               # Logging, cache, helpers
-tests/                   # Unit and integration tests
-data/                    # Local cache (ttl) [gitignored]
-indices/                 # FAISS indexes [gitignored]
+  access_control.py      # Проверка доступа и админ‑токены
+  chat_interface.py      # FastAPI + CLI
+  config.py              # Настройки из окружения
+  gitlab_api_handler.py  # Интеграция с GitLab API + кэш
+  index_builder.py       # Построение/поиск по FAISS
+  index_updater.py       # Пересборка индекса по проекту
+  langchain_chain.py     # Генерация ответа через LangChain
+  partial_file_loader.py # Чанкинг и фильтрация файлов
+  query_processor.py     # Оркестрация запроса → ответ
+  structure_parser.py    # Поиск ключевых файлов/конфигов/модулей
+  utils.py               # Логирование, TTL‑кэш, ретраи
+templates/               # /setup и простой дашборд
+static/                  # Стили для страниц
+tests/                   # Pytest тесты
+data/                    # Локальный кэш (создаётся в рантайме)
+indices/                 # Индексы FAISS (создаётся в рантайме)
 ```
 
-### Configuration (.env)
-See `.env.example` for all options. Important:
-- GITLAB_BASE_URL, GITLAB_TOKEN
-- OPENAI_API_KEY, EMBEDDING_MODEL
-- CACHE_DIR, CACHE_TTL_SECONDS, REDIS_URL (optional)
-- INDEX_DIR, LOG_LEVEL
+### Заметки по безопасности
+- Доступ к проектам ограничивается `ALLOWED_PROJECTS`; при пустом значении разрешены все
+- Админ‑токены из `ADMIN_TOKENS` дают доступ к любому проекту (заголовок `X-API-Key`)
+- Все попытки доступа логируются
 
-### Security
-- Access checks per-project
-- API key/token management
-- Access attempts are logged
+### Зависимости
+См. `requirements.txt`. Основные: FastAPI, Uvicorn, httpx, langchain, langchain-openai, openai, faiss-cpu, numpy, pydantic, tenacity, redis, Jinja2, pytest, pytest-cov.
 
-### Roadmap
-- Add Pinecone option
-- Extend file-type heuristics
-- Advanced RAG with multi-repo context merging
-
-# Devops_repo_chat
-Чат-бот по репозиториям с несколькими микросервисами
+---
+Название проекта: GitLab Multi‑Repo Q&A Bot
